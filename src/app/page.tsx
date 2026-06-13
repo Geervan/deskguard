@@ -11,6 +11,7 @@ import { BackgroundShell } from "@/components/BackgroundShell";
 
 export default function Home() {
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [seatsLoaded, setSeatsLoaded] = useState(false);
   const [user, setUser] = useState<any>(null);
   
   // App data states
@@ -47,6 +48,8 @@ export default function Home() {
     } catch (err: any) {
       console.error("Database connection or fetch error:", err);
       setDbError(err.message || "Failed to load seats database. Make sure DATABASE_URL is correctly set and migrations have been run.");
+    } finally {
+      setSeatsLoaded(true);
     }
   }, []);
 
@@ -94,18 +97,7 @@ export default function Home() {
     }
   };
 
-  // 1. Initial boot screen: session checking
-  if (!sessionChecked) {
-    return (
-      <main className="flex-1 flex flex-col items-center justify-center min-h-[100dvh] bg-[#030303] text-white p-6 relative">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.04)_0,transparent_60%)] pointer-events-none" />
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-3" />
-        <span className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Securing Connection...</span>
-      </main>
-    );
-  }
-
-  // 2. Database Connection Error alert screen
+  // 1. Database Connection Error alert screen (Checked first to prevent loop/hang)
   if (dbError && dbError.includes("DATABASE_URL")) {
     return (
       <main className="flex-1 flex flex-col items-center justify-center min-h-[100dvh] bg-[#030303] text-white p-6">
@@ -126,6 +118,7 @@ export default function Home() {
             <button
               onClick={() => {
                 setSessionChecked(false);
+                setSeatsLoaded(false);
                 checkSession();
                 fetchSeatsData();
               }}
@@ -135,6 +128,17 @@ export default function Home() {
             </button>
           </div>
         </div>
+      </main>
+    );
+  }
+
+  // 2. Initial boot screen: session checking and seats loading
+  if (!sessionChecked || !seatsLoaded) {
+    return (
+      <main className="flex-1 flex flex-col items-center justify-center min-h-[100dvh] bg-[#030303] text-white p-6 relative">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.04)_0,transparent_60%)] pointer-events-none" />
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-3" />
+        <span className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Securing Connection...</span>
       </main>
     );
   }

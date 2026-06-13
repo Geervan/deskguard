@@ -78,39 +78,82 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
     }
   };
 
+  const autoVacateSeat = React.useCallback(async () => {
+    if (isActionLoading) return;
+    setIsActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/sessions/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to release seat");
+
+      await onRefreshData();
+      await fetchPersonalLogs();
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setIsActionLoading(false);
+    }
+  }, [isActionLoading, onRefreshData]);
+
+  // Timers and Callback Ref to avoid interval resets
+  const callbacksRef = React.useRef({
+    autoVacateSeat,
+    onRefreshData,
+    activeSession
+  });
+
+  useEffect(() => {
+    callbacksRef.current = {
+      autoVacateSeat,
+      onRefreshData,
+      activeSession
+    };
+  }, [autoVacateSeat, onRefreshData, activeSession]);
+
   // Run countdown tickers for Break or Presence Checks
   useEffect(() => {
     if (!activeSession) return;
 
     const interval = setInterval(() => {
       const now = Date.now();
+      const currentSession = callbacksRef.current.activeSession;
+      if (!currentSession) return;
 
       // 1. Break timer
-      if (activeSession.status === "AWAY" && activeSession.awayUntil) {
-        const awayUntilTime = new Date(activeSession.awayUntil).getTime();
+      if (currentSession.status === "AWAY" && currentSession.awayUntil) {
+        const awayUntilTime = new Date(currentSession.awayUntil).getTime();
         const diffSecs = Math.max(0, Math.floor((awayUntilTime - now) / 1000));
         
         if (diffSecs === 0) {
           setBreakCountdown("Expired");
-          // Check if grace period is set
-          if (activeSession.breakGracePeriodEnd) {
-            const graceEnd = new Date(activeSession.breakGracePeriodEnd).getTime();
-            const graceDiffSecs = Math.max(0, Math.floor((graceEnd - now) / 1000));
-            
-            if (graceDiffSecs > 0) {
-              setShowBreakExpiredPrompt(true);
-              const mins = Math.floor(graceDiffSecs / 60);
-              const secs = graceDiffSecs % 60;
-              setBreakGraceCountdown(`${mins}:${secs < 10 ? "0" + secs : secs}`);
-            } else {
-              setBreakGraceCountdown("Expired");
-              onRefreshData();
-            }
+          
+          // Calculate grace period end (fallback to 5 minutes from awayUntil if DB state not synced yet)
+          const graceEnd = currentSession.breakGracePeriodEnd 
+            ? new Date(currentSession.breakGracePeriodEnd).getTime() 
+            : awayUntilTime + 5 * 60 * 1000;
+          
+          const graceDiffSecs = Math.max(0, Math.floor((graceEnd - now) / 1000));
+          
+          if (graceDiffSecs > 0) {
+            setShowBreakExpiredPrompt(true);
+            const mins = Math.floor(graceDiffSecs / 60);
+            const secs = graceDiffSecs % 60;
+            setBreakGraceCountdown(`${mins}:${secs < 10 ? "0" + secs : secs}`);
+          } else {
+            setBreakGraceCountdown("Expired");
+            callbacksRef.current.autoVacateSeat();
           }
         } else {
           const mins = Math.floor(diffSecs / 60);
           const secs = diffSecs % 60;
           setBreakCountdown(`${mins}:${secs < 10 ? "0" + secs : secs}`);
+          setShowBreakExpiredPrompt(false);
+          setBreakGraceCountdown("");
         }
       } else {
         setBreakCountdown("");
@@ -119,8 +162,8 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
       }
 
       // 2. Presence Check timer
-      if (activeSession.nextPresenceCheckAt) {
-        const checkTime = new Date(activeSession.nextPresenceCheckAt).getTime();
+      if (currentSession.nextPresenceCheckAt) {
+        const checkTime = new Date(currentSession.nextPresenceCheckAt).getTime();
         
         // Presence check is due when current time has reached or passed nextPresenceCheckAt
         const isDue = now >= checkTime;
@@ -133,7 +176,7 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
           
           if (diffSecs === 0) {
             setPresenceCountdown("Expired");
-            onRefreshData();
+            callbacksRef.current.autoVacateSeat();
           } else {
             const mins = Math.floor(diffSecs / 60);
             const secs = diffSecs % 60;
@@ -149,7 +192,7 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [activeSession, onRefreshData]);
+  }, [activeSession]);
 
   const handleTakeBreak = async () => {
     setIsActionLoading(true);
@@ -272,9 +315,27 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
       {DialogNode}
       {/* Student Top Bar */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/5 pb-6">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-white">My Dashboard</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">Logged in as {user.name} ({user.email})</p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500/20 to-emerald-500/20 border border-white/10 flex items-center justify-center font-bold text-amber-400 text-sm select-none shrink-0 shadow-lg">
+            {(() => {
+              if (user.name) {
+                const parts = user.name.trim().split(/\s+/);
+                if (parts.length > 1) {
+                  return (parts[0][0] + parts[1][0]).toUpperCase();
+                }
+                return user.name.slice(0, 2).toUpperCase();
+              }
+              return (user.email ? user.email.slice(0, 2).toUpperCase() : "ST");
+            })()}
+          </div>
+          <div>
+            <h1 className="text-lg font-bold tracking-tight text-white leading-tight">
+              {user.name ? `Welcome, ${user.name}` : "My Student Dashboard"}
+            </h1>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Logged in as <span className="font-semibold text-zinc-200">{user.email}</span>
+            </p>
+          </div>
         </div>
         
         <button
@@ -327,86 +388,39 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
                   {/* Break Timer or regular timer */}
                   <div className="bg-white/[0.01] border border-white/5 rounded-2xl p-4 flex flex-col justify-between">
                     {activeSession.status === "AWAY" ? (
-                      <>
-                        <span className="text-[10px] font-mono text-amber-500 uppercase block mb-1">Break Time Remaining</span>
-                        <span className="text-xl font-bold text-amber-400 mt-2 font-mono">{breakCountdown || "Calculating..."}</span>
-                      </>
+                      breakCountdown === "Expired" ? (
+                        <>
+                          <span className="text-[10px] font-mono text-rose-500 uppercase block mb-1">Time to Auto-Vacate</span>
+                          <span className="text-xl font-bold text-rose-400 mt-2 font-mono animate-pulse">{breakGraceCountdown || "0:00"}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[10px] font-mono text-amber-500 uppercase block mb-1">Break Time Remaining</span>
+                          <span className="text-xl font-bold text-amber-400 mt-2 font-mono">{breakCountdown || "Calculating..."}</span>
+                        </>
+                      )
                     ) : (
-                      <>
-                        <span className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Next Presence Check</span>
-                        <div className="flex items-center gap-2 mt-2">
-                          <ShieldCheck className="w-4 h-4 text-emerald-500/80" />
-                          <span className="text-sm font-semibold text-zinc-200">
-                            {new Date(activeSession.nextPresenceCheckAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      </>
+                      showPresenceCheck ? (
+                        <>
+                          <span className="text-[10px] font-mono text-rose-500 uppercase block mb-1">Time to Auto-Vacate</span>
+                          <span className="text-xl font-bold text-rose-400 mt-2 font-mono animate-pulse">{presenceCountdown || "0:00"}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">Next Presence Check</span>
+                          <div className="flex items-center gap-2 mt-2">
+                            <ShieldCheck className="w-4 h-4 text-emerald-500/80" />
+                            <span className="text-sm font-semibold text-zinc-200">
+                              {new Date(activeSession.nextPresenceCheckAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </>
+                      )
                     )}
                   </div>
                 </div>
 
-                {/* Break Expired Alert Banner */}
-                <AnimatePresence>
-                  {showBreakExpiredPrompt && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                    >
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                        <div>
-                          <h4 className="text-xs font-bold text-rose-300">Your break has expired!</h4>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">Would you like to extend your break or release your seat? Time left to respond: <span className="font-mono font-semibold text-white">{breakGraceCountdown}</span></p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={handleExtendBreak}
-                          disabled={isActionLoading}
-                          className="py-1.5 px-4 bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold rounded-xl btn-haptic disabled:opacity-50"
-                        >
-                          Extend Break
-                        </button>
-                        <button
-                          onClick={handleLeaveSeat}
-                          disabled={isActionLoading}
-                          className="py-1.5 px-4 bg-white hover:bg-zinc-200 text-black text-xs font-bold rounded-xl btn-haptic disabled:opacity-50"
-                        >
-                          Release Seat
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
 
-                {/* Presence check Alert Banner */}
-                <AnimatePresence>
-                  {showPresenceCheck && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                    >
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                        <div>
-                          <h4 className="text-xs font-bold text-amber-300">Are you still studying at Seat {activeSession.seatId}?</h4>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">Confirm your presence to avoid automatically releasing your desk. Time left: <span className="font-mono font-semibold text-white">{presenceCountdown}</span></p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={handleConfirmPresence}
-                        disabled={isActionLoading}
-                        className="py-1.5 px-4 bg-amber-500 text-black text-xs font-bold rounded-xl btn-haptic shrink-0 disabled:opacity-50"
-                      >
-                        Yes, I'm Here
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
 
                 {/* Dashboard Action Controls */}
                 <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-white/5">
@@ -431,7 +445,7 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
                   <button
                     onClick={handleLeaveSeat}
                     disabled={isActionLoading}
-                    className="flex-1 py-3 rounded-xl bg-white hover:bg-zinc-200 text-black font-semibold text-xs flex items-center justify-center gap-2 btn-haptic"
+                    className="flex-1 py-3 rounded-xl bg-red-500/80 hover:bg-zinc-200 text-white font-semibold text-xs flex items-center justify-center gap-2 btn-haptic"
                   >
                     Leave Seat (Voluntary release)
                   </button>
@@ -551,6 +565,128 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
         </div>
 
       </div>
+      {/* Break Expired Grace Period Overlay Modal */}
+      <AnimatePresence>
+        {showBreakExpiredPrompt && (
+          <motion.div
+            key="break-expired-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-md bg-black/80"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="w-full max-w-md double-bezel-outer bg-zinc-950/95 border-rose-500/30 shadow-2xl rounded-2xl"
+            >
+              <div className="double-bezel-inner p-6 text-center space-y-6">
+                <div className="mx-auto w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center animate-bounce">
+                  <AlertTriangle className="w-6 h-6 text-rose-500" />
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-white tracking-tight">Your Break Has Expired!</h3>
+                  <p className="text-xs text-zinc-400 max-w-xs mx-auto leading-relaxed">
+                    You have exceeded your 20-minute break limit. Confirm if you want to return or vacate.
+                  </p>
+                </div>
+
+                <div className="py-4 bg-white/[0.01] border border-white/5 rounded-2xl flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">Time to Auto-Vacate</span>
+                  <span className="text-4xl font-black font-mono text-rose-500 tracking-wider animate-pulse">
+                    {breakGraceCountdown || "0:00"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    onClick={autoVacateSeat}
+                    disabled={isActionLoading}
+                    className="flex-1 py-3 rounded-xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.06] text-zinc-300 font-semibold text-xs transition-colors disabled:opacity-50 btn-haptic"
+                  >
+                    Vacate Seat
+                  </button>
+                  <button
+                    onClick={handleReturnFromBreak}
+                    disabled={isActionLoading}
+                    className="flex-[1.3] py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs shadow-lg shadow-amber-500/10 transition-colors disabled:opacity-50 btn-haptic"
+                  >
+                    Return to Seat
+                  </button>
+                </div>
+                {errorMsg && (
+                  <p className="text-xs text-rose-500 font-mono">{errorMsg}</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Presence Check Grace Period Overlay Modal */}
+      <AnimatePresence>
+        {showPresenceCheck && (
+          <motion.div
+            key="presence-check-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-md bg-black/80"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="w-full max-w-md double-bezel-outer bg-zinc-950/95 border-amber-500/30 shadow-2xl rounded-2xl"
+            >
+              <div className="double-bezel-inner p-6 text-center space-y-6">
+                <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center animate-bounce">
+                  <ShieldCheck className="w-6 h-6 text-amber-500" />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-white tracking-tight">Are you still studying here?</h3>
+                  <p className="text-xs text-zinc-400 max-w-xs mx-auto leading-relaxed">
+                    DeskGuard triggers checks every 2 hours to prevent seat hoarding. Please confirm your presence.
+                  </p>
+                </div>
+
+                <div className="py-4 bg-white/[0.01] border border-white/5 rounded-2xl flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">Time to Auto-Vacate</span>
+                  <span className="text-4xl font-black font-mono text-amber-400 tracking-wider animate-pulse">
+                    {presenceCountdown || "0:00"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    onClick={autoVacateSeat}
+                    disabled={isActionLoading}
+                    className="flex-1 py-3 rounded-xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.06] text-zinc-300 font-semibold text-xs transition-colors disabled:opacity-50 btn-haptic"
+                  >
+                    Vacate Seat
+                  </button>
+                  <button
+                    onClick={handleConfirmPresence}
+                    disabled={isActionLoading}
+                    className="flex-[1.3] py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs shadow-lg shadow-amber-500/10 transition-colors disabled:opacity-50 btn-haptic"
+                  >
+                    Yes, I'm Here
+                  </button>
+                </div>
+                {errorMsg && (
+                  <p className="text-xs text-rose-500 font-mono">{errorMsg}</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <QrScannerModal
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
