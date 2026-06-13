@@ -66,6 +66,7 @@ model SeatSession {
   seat                 Seat      @relation(fields: [seatId], references: [id], onDelete: Cascade)
   startedAt            DateTime  @default(now())
   awayUntil            DateTime? // When break expires
+  breakGracePeriodEnd  DateTime? // When break grace period ends (5 min after awayUntil)
   nextPresenceCheckAt  DateTime? // When presence modal must show
   endedAt              DateTime? // Null if active
   abandoned            Boolean   @default(false)

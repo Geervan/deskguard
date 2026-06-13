@@ -15,11 +15,44 @@ export async function runSweeper(): Promise<SweepResult> {
   };
 
   try {
-    // 1. Find sessions with expired AWAY states (awayUntil is not null and is less than now)
+    // 1. Find sessions with expired AWAY states that don't have a grace period set yet
     const expiredAwaySessions = await prisma.seatSession.findMany({
       where: {
         endedAt: null,
         awayUntil: {
+          lt: now
+        },
+        breakGracePeriodEnd: null
+      },
+      include: {
+        seat: true,
+        user: true
+      }
+    });
+
+    for (const session of expiredAwaySessions) {
+      // Set a 5-minute grace period for the user to respond
+      const gracePeriodEnd = new Date(session.awayUntil!.getTime() + 5 * 60 * 1000);
+      
+      await prisma.seatSession.update({
+        where: { id: session.id },
+        data: {
+          breakGracePeriodEnd: gracePeriodEnd
+        }
+      });
+
+      const studentName = session.user.name || session.user.email;
+      result.expiredBreaksCount++;
+      result.actions.push(
+        `[Break Expired] Set 5-min grace period for seat ${session.seatId} occupied by ${studentName} (break expired at ${session.awayUntil?.toLocaleTimeString()})`
+      );
+    }
+
+    // 2. Find sessions where the break grace period has expired
+    const expiredGracePeriodSessions = await prisma.seatSession.findMany({
+      where: {
+        endedAt: null,
+        breakGracePeriodEnd: {
           lt: now
         }
       },
@@ -29,7 +62,7 @@ export async function runSweeper(): Promise<SweepResult> {
       }
     });
 
-    for (const session of expiredAwaySessions) {
+    for (const session of expiredGracePeriodSessions) {
       await prisma.$transaction([
         prisma.seatSession.update({
           where: { id: session.id },
@@ -55,7 +88,7 @@ export async function runSweeper(): Promise<SweepResult> {
       const studentName = session.user.name || session.user.email;
       result.expiredBreaksCount++;
       result.actions.push(
-        `[Away Expired] Released seat ${session.seatId} occupied by ${studentName} (break expired at ${session.awayUntil?.toLocaleTimeString()})`
+        `[Grace Period Expired] Released seat ${session.seatId} occupied by ${studentName} (no response within grace period)`
       );
     }
 

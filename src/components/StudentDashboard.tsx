@@ -45,8 +45,10 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
 
   // Timers
   const [breakCountdown, setBreakCountdown] = useState<string>("");
+  const [breakGraceCountdown, setBreakGraceCountdown] = useState<string>("");
   const [presenceCountdown, setPresenceCountdown] = useState<string>("");
   const [showPresenceCheck, setShowPresenceCheck] = useState(false);
+  const [showBreakExpiredPrompt, setShowBreakExpiredPrompt] = useState(false);
 
   // Identify active session for this user
   useEffect(() => {
@@ -90,8 +92,21 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
         
         if (diffSecs === 0) {
           setBreakCountdown("Expired");
-          // Trigger data refresh because sweeper will release the seat
-          onRefreshData();
+          // Check if grace period is set
+          if (activeSession.breakGracePeriodEnd) {
+            const graceEnd = new Date(activeSession.breakGracePeriodEnd).getTime();
+            const graceDiffSecs = Math.max(0, Math.floor((graceEnd - now) / 1000));
+            
+            if (graceDiffSecs > 0) {
+              setShowBreakExpiredPrompt(true);
+              const mins = Math.floor(graceDiffSecs / 60);
+              const secs = graceDiffSecs % 60;
+              setBreakGraceCountdown(`${mins}:${secs < 10 ? "0" + secs : secs}`);
+            } else {
+              setBreakGraceCountdown("Expired");
+              onRefreshData();
+            }
+          }
         } else {
           const mins = Math.floor(diffSecs / 60);
           const secs = diffSecs % 60;
@@ -99,6 +114,8 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
         }
       } else {
         setBreakCountdown("");
+        setShowBreakExpiredPrompt(false);
+        setBreakGraceCountdown("");
       }
 
       // 2. Presence Check timer
@@ -161,6 +178,24 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
       if (!res.ok) throw new Error(data.error || "Failed to return from break");
 
       confetti({ particleCount: 50, spread: 80, origin: { y: 0.8 } });
+      await onRefreshData();
+      await fetchPersonalLogs();
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleExtendBreak = async () => {
+    setIsActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/sessions/break/extend", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to extend break");
+
+      confetti({ particleCount: 30, spread: 60, origin: { y: 0.8 } });
       await onRefreshData();
       await fetchPersonalLogs();
     } catch (err: any) {
@@ -309,6 +344,42 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
                     )}
                   </div>
                 </div>
+
+                {/* Break Expired Alert Banner */}
+                <AnimatePresence>
+                  {showBreakExpiredPrompt && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-bold text-rose-300">Your break has expired!</h4>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">Would you like to extend your break or release your seat? Time left to respond: <span className="font-mono font-semibold text-white">{breakGraceCountdown}</span></p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={handleExtendBreak}
+                          disabled={isActionLoading}
+                          className="py-1.5 px-4 bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold rounded-xl btn-haptic disabled:opacity-50"
+                        >
+                          Extend Break
+                        </button>
+                        <button
+                          onClick={handleLeaveSeat}
+                          disabled={isActionLoading}
+                          className="py-1.5 px-4 bg-white hover:bg-zinc-200 text-black text-xs font-bold rounded-xl btn-haptic disabled:opacity-50"
+                        >
+                          Release Seat
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Presence check Alert Banner */}
                 <AnimatePresence>
