@@ -2,17 +2,12 @@ import { NextResponse } from "next/server";
 import { getSessionPayload } from "@/lib/auth";
 import { getGeofenceConfig, saveGeofenceConfig } from "@/lib/geofence";
 
-// GET /api/admin/geofence - Retrieve current geofence settings
+export const dynamic = "force-dynamic";
+
+// GET /api/admin/geofence - Retrieve current geofence settings (Publicly accessible for checkin verification)
 export async function GET() {
   try {
-    const session = await getSessionPayload();
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized. Please sign in." },
-        { status: 401 }
-      );
-    }
-    const config = getGeofenceConfig();
+    const config = await getGeofenceConfig();
     return NextResponse.json({ success: true, config });
   } catch (error: any) {
     return NextResponse.json(
@@ -43,14 +38,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const currentConfig = getGeofenceConfig();
+    const currentConfig = await getGeofenceConfig();
     const newConfig = {
       lat,
       lng,
       radius: typeof radius === "number" ? radius : currentConfig.radius,
     };
 
-    saveGeofenceConfig(newConfig);
+    await saveGeofenceConfig(newConfig);
 
     return NextResponse.json({
       success: true,

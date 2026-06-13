@@ -90,3 +90,9 @@ model ActivityLog {
   @@index([userId])
   @@index([timestamp])
 }
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

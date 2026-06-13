@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const config = getGeofenceConfig();
+      const config = await getGeofenceConfig();
       const distance = getDistanceMeters(userLat, userLng, config.lat, config.lng);
       if (distance > config.radius) {
         return NextResponse.json(

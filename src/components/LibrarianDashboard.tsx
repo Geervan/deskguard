@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState, useTransition } from "react";
 import { SeatMap, SeatData } from "./SeatMap";
-import { LogOut, Trash2, RotateCcw, RefreshCw, Users, ChevronRight, UserCheck, User, Printer, QrCode, Calendar, MapPin } from "lucide-react";
+import { LogOut, Trash2, RotateCcw, RefreshCw, Users, ChevronRight, UserCheck, User, Printer, QrCode, Calendar, MapPin, Heart } from "lucide-react";
 import confetti from "canvas-confetti";
+import { motion, AnimatePresence } from "framer-motion";
 import { useConfirm } from "./ConfirmDialog";
 
 function groupLogsByDate<T extends { timestamp: string | Date }>(logs: T[]) {
@@ -93,8 +94,23 @@ export function LibrarianDashboard({
   // Geofence configuration states
   const [geoConfig, setGeoConfig] = useState<{ lat: number; lng: number; radius: number } | null>(null);
   const [isPinning, setIsPinning] = useState(false);
+  const [isEditingGeo, setIsEditingGeo] = useState(false);
+  const [manualLat, setManualLat] = useState("");
+  const [manualLng, setManualLng] = useState("");
+  const [manualRadius, setManualRadius] = useState("");
+  const [showSurprise, setShowSurprise] = useState(false);
 
   const { confirm, DialogNode } = useConfirm();
+
+  const handleOpenSurprise = () => {
+    setShowSurprise(true);
+    confetti({
+      particleCount: 150,
+      spread: 70,
+      colors: ["#ec4899", "#f43f5e", "#fda4af", "#ffffff"],
+      origin: { y: 0.6 }
+    });
+  };
 
   // Fetch geofence settings on mount
   const fetchGeofence = async () => {
@@ -176,6 +192,61 @@ export function LibrarianDashboard({
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to reset geofence coordinates");
+      setTimeout(() => setErrorMsg(null), 3500);
+    } finally {
+      setIsPinning(false);
+    }
+  };
+
+  const handleStartManualEdit = () => {
+    if (geoConfig) {
+      setManualLat(geoConfig.lat.toString());
+      setManualLng(geoConfig.lng.toString());
+      setManualRadius(geoConfig.radius.toString());
+    } else {
+      setManualLat("37.7749");
+      setManualLng("-122.4194");
+      setManualRadius("100");
+    }
+    setIsEditingGeo(true);
+  };
+
+  const handleSaveManualGeofence = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const latNum = parseFloat(manualLat);
+    const lngNum = parseFloat(manualLng);
+    const radiusNum = parseFloat(manualRadius);
+
+    if (isNaN(latNum) || isNaN(lngNum) || isNaN(radiusNum)) {
+      setErrorMsg("All coordinates and radius must be valid numbers.");
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
+
+    setIsPinning(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const res = await fetch("/api/admin/geofence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lat: latNum,
+          lng: lngNum,
+          radius: radiusNum,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGeoConfig(data.config);
+        setSuccessMsg("Geofence settings updated successfully.");
+        setTimeout(() => setSuccessMsg(null), 3500);
+        setIsEditingGeo(false);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to update geofence coordinates");
       setTimeout(() => setErrorMsg(null), 3500);
     } finally {
       setIsPinning(false);
@@ -322,461 +393,533 @@ export function LibrarianDashboard({
       {/* Screen Layout */}
       <div className="space-y-8 w-full max-w-6xl mx-auto py-12 px-4 no-print">
 
-      {/* ── Top bar ── */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/5 pb-6">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-amber-500" /> Librarian Control Panel
-          </h1>
-          <p className="text-xs text-zinc-500 mt-0.5">{user.name} · {user.email}</p>
+        {/* ── Top bar ── */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/5 pb-6">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-amber-500" /> Librarian Control Panel
+            </h1>
+            <p className="text-xs text-zinc-500 mt-0.5">{user.name} · {user.email}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleOpenSurprise}
+              className="relative overflow-hidden flex items-center gap-1.5 px-3.5 py-1.5 border border-pink-500/30 bg-gradient-to-r from-pink-500/10 via-rose-500/15 to-pink-500/10 hover:from-pink-500/20 hover:to-rose-500/25 rounded-xl text-xs text-pink-400 font-bold cursor-pointer transition-all duration-300 shadow-[0_0_15px_rgba(236,72,153,0.15)] hover:shadow-[0_0_25px_rgba(236,72,153,0.35)] hover:scale-105 border-pink-500/50 group animate-pulse"
+            >
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping" />
+              <Heart className="w-3.5 h-3.5 fill-pink-500/20 text-pink-400 group-hover:scale-110 transition-transform duration-300" /> Click Me
+            </button>
+            <button
+              onClick={() => setIsPrintingAll(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 rounded-xl text-xs text-amber-400 btn-haptic font-semibold cursor-pointer"
+            >
+              <QrCode className="w-3.5 h-3.5" /> Print All QRs
+            </button>
+            <button
+              onClick={handleResetDatabase}
+              disabled={isSeeding}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 rounded-xl text-xs text-rose-400 btn-haptic font-semibold disabled:opacity-50"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${isSeeding ? "animate-spin" : ""}`} /> Clear All Data
+            </button>
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 rounded-xl text-xs text-rose-400 btn-haptic font-semibold"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Sign Out
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsPrintingAll(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 rounded-xl text-xs text-amber-400 btn-haptic font-semibold cursor-pointer"
-          >
-            <QrCode className="w-3.5 h-3.5" /> Print All QRs
-          </button>
-          <button
-            onClick={handleResetDatabase}
-            disabled={isSeeding}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 rounded-xl text-xs text-rose-400 btn-haptic font-semibold disabled:opacity-50"
-          >
-            <RotateCcw className={`w-3.5 h-3.5 ${isSeeding ? "animate-spin" : ""}`} /> Clear All Data
-          </button>
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 rounded-xl text-xs text-rose-400 btn-haptic font-semibold"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Sign Out
-          </button>
-        </div>
-      </div>
 
-      {/* ── Stats ── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {[
-          { label: "Total Desks", value: stats.total, cls: "text-white" },
-          { label: "Occupied", value: stats.occupied, cls: "text-rose-400" },
-          { label: "Away", value: stats.away, cls: "text-amber-400" },
-          { label: "Available", value: stats.available, cls: "text-emerald-400" },
-          { label: "Occupancy", value: `${stats.occupancyRate}%`, cls: "text-white" },
-        ].map(({ label, value, cls }) => (
-          <div key={label} className="double-bezel-outer bg-zinc-950/80 backdrop-blur-sm">
-            <div className="double-bezel-inner py-4 px-5">
-              <span className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">{label}</span>
-              <span className={`text-2xl font-bold font-mono ${cls}`}>{value}</span>
+        {/* ── Stats ── */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {[
+            { label: "Total Desks", value: stats.total, cls: "text-white" },
+            { label: "Occupied", value: stats.occupied, cls: "text-rose-400" },
+            { label: "Away", value: stats.away, cls: "text-amber-400" },
+            { label: "Available", value: stats.available, cls: "text-emerald-400" },
+            { label: "Occupancy", value: `${stats.occupancyRate}%`, cls: "text-white" },
+          ].map(({ label, value, cls }) => (
+            <div key={label} className="double-bezel-outer bg-zinc-950/80 backdrop-blur-sm">
+              <div className="double-bezel-inner py-4 px-5">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase block mb-1">{label}</span>
+                <span className={`text-2xl font-bold font-mono ${cls}`}>{value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Geofence Control Center ── */}
+        <div className="double-bezel-outer bg-zinc-950/80 backdrop-blur-sm">
+          <div className="double-bezel-inner">
+            {isEditingGeo ? (
+              <form onSubmit={handleSaveManualGeofence} className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                  <MapPin className="w-4.5 h-4.5 text-emerald-400" />
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Edit Geofence Coordinates</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-550 uppercase mb-1">Latitude</label>
+                    <input
+                      type="text"
+                      required
+                      value={manualLat}
+                      onChange={(e) => setManualLat(e.target.value)}
+                      className="w-full bg-zinc-900 border border-white/10 rounded-lg text-xs font-mono px-3 py-2 text-white focus:border-amber-500 focus:outline-none"
+                      placeholder="37.7749"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-550 uppercase mb-1">Longitude</label>
+                    <input
+                      type="text"
+                      required
+                      value={manualLng}
+                      onChange={(e) => setManualLng(e.target.value)}
+                      className="w-full bg-zinc-900 border border-white/10 rounded-lg text-xs font-mono px-3 py-2 text-white focus:border-amber-500 focus:outline-none"
+                      placeholder="-122.4194"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-550 uppercase mb-1">Radius (meters)</label>
+                    <input
+                      type="text"
+                      required
+                      value={manualRadius}
+                      onChange={(e) => setManualRadius(e.target.value)}
+                      className="w-full bg-zinc-900 border border-white/10 rounded-lg text-xs font-mono px-3 py-2 text-white focus:border-amber-500 focus:outline-none"
+                      placeholder="100"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingGeo(false)}
+                    className="px-3.5 py-1.5 border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] rounded-xl text-[10px] font-mono text-zinc-400 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isPinning}
+                    className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black font-bold rounded-xl text-[10px] font-mono flex items-center gap-1.5 cursor-pointer"
+                  >
+                    Save Coordinates
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center shrink-0 mt-0.5">
+                    <MapPin className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Library Geofence Center</h3>
+                    {geoConfig ? (
+                      <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                        Pinned: {geoConfig.lat.toFixed(6)}, {geoConfig.lng.toFixed(6)} &middot; Radius: {geoConfig.radius}m
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-zinc-600 mt-0.5">Loading pinned coordinates…</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleResetGeofence}
+                    disabled={isPinning}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] rounded-xl text-[10px] font-mono text-zinc-400 btn-haptic disabled:opacity-40"
+                  >
+                    <RotateCcw className={`w-3 h-3 ${isPinning ? "animate-spin" : ""}`} /> Reset Default
+                  </button>
+                  <button
+                    onClick={handleStartManualEdit}
+                    disabled={isPinning}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] rounded-xl text-[10px] font-mono text-zinc-400 btn-haptic disabled:opacity-40 cursor-pointer"
+                  >
+                    Edit Manually
+                  </button>
+                  <button
+                    onClick={handlePinLocation}
+                    disabled={isPinning}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-500/25 bg-emerald-500/8 hover:bg-emerald-500/15 rounded-xl text-[10px] font-mono text-emerald-400 font-bold btn-haptic disabled:opacity-40"
+                  >
+                    <MapPin className={`w-3 h-3 ${isPinning ? "animate-pulse" : ""}`} />
+                    {isPinning ? "Locating…" : "Pin My Location as Library"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Visual Heatmap + Seat Table Grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+          {/* Left Column: Visual Seating Heatmap */}
+          <div className="lg:col-span-7 space-y-4">
+            <div className="double-bezel-outer bg-zinc-950/80 backdrop-blur-sm">
+              <div className="double-bezel-inner space-y-4">
+                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Visual Seating Heatmap</h3>
+                </div>
+
+                <SeatMap
+                  seats={seats}
+                  onSelectSeat={handleSelectSeat}
+                  selectedSeatId={selectedSeat?.id}
+                  showOccupantName={true}
+                />
+              </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* ── Geofence Control Center ── */}
-      <div className="double-bezel-outer bg-zinc-950/80 backdrop-blur-sm">
-        <div className="double-bezel-inner">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center shrink-0 mt-0.5">
-                <MapPin className="w-4 h-4 text-emerald-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">Library Geofence Center</h3>
-                {geoConfig ? (
-                  <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                    Pinned: {geoConfig.lat.toFixed(6)}, {geoConfig.lng.toFixed(6)} &middot; Radius: {geoConfig.radius}m
-                  </p>
-                ) : (
-                  <p className="text-[10px] text-zinc-600 mt-0.5">Loading pinned coordinates…</p>
+          {/* Right Column: Seat Occupancy Matrix (Table) */}
+          <div className="lg:col-span-5 space-y-4">
+            <div className="double-bezel-outer bg-zinc-950/80 backdrop-blur-sm">
+              <div className="double-bezel-inner space-y-4">
+                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                  <h3 className="text-sm font-bold text-white">Seat Occupancy Matrix</h3>
+                  <button
+                    onClick={() => startTransition(onRefreshData)}
+                    disabled={isPending}
+                    className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isPending ? "animate-spin" : ""}`} /> {isPending ? "Loading..." : "Refresh"}
+                  </button>
+                </div>
+
+                {errorMsg && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">{errorMsg}</div>
                 )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={handleResetGeofence}
-                disabled={isPinning}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] rounded-xl text-[10px] font-mono text-zinc-400 btn-haptic disabled:opacity-40"
-              >
-                <RotateCcw className={`w-3 h-3 ${isPinning ? "animate-spin" : ""}`} /> Reset Default
-              </button>
-              <button
-                onClick={handlePinLocation}
-                disabled={isPinning}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-500/25 bg-emerald-500/8 hover:bg-emerald-500/15 rounded-xl text-[10px] font-mono text-emerald-400 font-bold btn-haptic disabled:opacity-40"
-              >
-                <MapPin className={`w-3 h-3 ${isPinning ? "animate-pulse" : ""}`} />
-                {isPinning ? "Locating…" : "Pin My Location as Library"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+                {successMsg && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">{successMsg}</div>
+                )}
 
-      {/* ── Visual Heatmap + Seat Table Grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
-        {/* Left Column: Visual Seating Heatmap */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="double-bezel-outer bg-zinc-950/80 backdrop-blur-sm">
-            <div className="double-bezel-inner space-y-4">
-              <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Visual Seating Heatmap</h3>
-              </div>
-              
-              <SeatMap
-                seats={seats}
-                onSelectSeat={handleSelectSeat}
-                selectedSeatId={selectedSeat?.id}
-                showOccupantName={true}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Seat Occupancy Matrix (Table) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="double-bezel-outer bg-zinc-950/80 backdrop-blur-sm">
-            <div className="double-bezel-inner space-y-4">
-              <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                <h3 className="text-sm font-bold text-white">Seat Occupancy Matrix</h3>
-                <button
-                  onClick={() => startTransition(onRefreshData)}
-                  disabled={isPending}
-                  className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isPending ? "animate-spin" : ""}`} /> {isPending ? "Loading..." : "Refresh"}
-                </button>
-              </div>
-
-              {errorMsg && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">{errorMsg}</div>
-              )}
-              {successMsg && (
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">{successMsg}</div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[460px] overflow-y-auto pr-1">
-                {seats.map((seat) => {
-                  const session = seat.activeSession;
-                  const dotCls =
-                    seat.status === "AVAILABLE" ? "bg-emerald-500" :
-                    seat.status === "OCCUPIED" ? "bg-rose-500" : "bg-amber-500";
-                  const isActive = selectedSeat?.id === seat.id;
-                  return (
-                    <div
-                      key={seat.id}
-                      onClick={() => handleSelectSeat(seat)}
-                      className={`flex items-center justify-between gap-2 rounded-xl border p-2 transition-colors cursor-pointer text-xs ${
-                        isActive
-                          ? "border-amber-500/30 bg-amber-500/8"
-                          : "border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03]"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotCls}`} />
-                        <div className="min-w-0">
-                          <span className="font-mono font-bold text-white block">{seat.id}</span>
-                          <span className="text-[9px] text-zinc-500 block truncate leading-none mt-0.5">{seat.section}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[460px] overflow-y-auto pr-1">
+                  {seats.map((seat) => {
+                    const session = seat.activeSession;
+                    const dotCls =
+                      seat.status === "AVAILABLE" ? "bg-emerald-500" :
+                        seat.status === "OCCUPIED" ? "bg-rose-500" : "bg-amber-500";
+                    const isActive = selectedSeat?.id === seat.id;
+                    return (
+                      <div
+                        key={seat.id}
+                        onClick={() => handleSelectSeat(seat)}
+                        className={`flex items-center justify-between gap-2 rounded-xl border p-2 transition-colors cursor-pointer text-xs ${isActive
+                            ? "border-amber-500/30 bg-amber-500/8"
+                            : "border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03]"
+                          }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotCls}`} />
+                          <div className="min-w-0">
+                            <span className="font-mono font-bold text-white block">{seat.id}</span>
+                            <span className="text-[9px] text-zinc-500 block truncate leading-none mt-0.5">{seat.section}</span>
+                          </div>
+                        </div>
+                        <div className="shrink-0">
+                          {session ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleReleaseSeat(seat.id); }}
+                              className="inline-flex items-center gap-1 py-1 px-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 rounded text-[9px] font-mono btn-haptic"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" /> Release
+                            </button>
+                          ) : (
+                            <span className="text-[9px] text-zinc-700 font-mono">Free</span>
+                          )}
                         </div>
                       </div>
-                      <div className="shrink-0">
-                        {session ? (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleReleaseSeat(seat.id); }}
-                            className="inline-flex items-center gap-1 py-1 px-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 rounded text-[9px] font-mono btn-haptic"
-                          >
-                            <Trash2 className="w-2.5 h-2.5" /> Release
-                          </button>
-                        ) : (
-                          <span className="text-[9px] text-zinc-700 font-mono">Free</span>
-                        )}
+                    );
+                  })}
+                </div>
+
+                <p className="text-[10px] font-mono text-zinc-600 text-center pt-2 border-t border-white/5">
+                  Click any seat on map or table row to inspect per-seat activity log
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ── Seat-scoped activity panel (slide-in from bottom) ── */}
+        {selectedSeat && (
+          <div className="fixed bottom-4 left-4 right-4 z-40 xl:left-auto xl:right-6 xl:bottom-6 xl:w-[440px]">
+            <div className="double-bezel-outer bg-zinc-950/95 backdrop-blur-xl shadow-2xl">
+              <div className="double-bezel-inner p-4 flex flex-col gap-4 max-h-[72dvh] overflow-y-auto">
+
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3 border-b border-white/5 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-amber-500" />
+                      <h3 className="text-sm font-bold text-white">Seat {selectedSeat.id} History</h3>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">{selectedSeat.section}</p>
+                  </div>
+                  <button
+                    onClick={() => { setSelectedSeat(null); setSelectedUser(null); setSelectedUserLogs([]); setSeatUsers([]); }}
+                    className="text-[10px] font-mono text-zinc-500 hover:text-white transition-colors shrink-0 mt-0.5"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {/* Current occupant details */}
+                {selectedSeat.activeSession ? (
+                  <div className="p-3.5 rounded-xl border border-amber-500/25 bg-amber-500/5 space-y-2">
+                    <div className="text-[9px] font-mono text-amber-500/80 uppercase tracking-widest">Current Occupant</div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/35 flex items-center justify-center text-amber-400 text-xs font-bold font-mono shrink-0">
+                        {(selectedSeat.activeSession.user.name || selectedSeat.activeSession.user.email)[0].toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-white block truncate">
+                          {selectedSeat.activeSession.user.name || "No Name"}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 block truncate">
+                          {selectedSeat.activeSession.user.email}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-zinc-500 font-mono mt-1 pt-1.5 border-t border-white/5 space-y-0.5">
+                      <div>Session started: {new Date(selectedSeat.activeSession.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                      {selectedSeat.activeSession.awayUntil && (
+                        <div className="text-amber-400">
+                          Away until: {new Date(selectedSeat.activeSession.awayUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-white/[0.01] border border-dashed border-white/5 rounded-xl text-center">
+                    <p className="text-xs text-zinc-600">This seat is currently available.</p>
+                  </div>
+                )}
+
+                {/* Printable Desk QR Code */}
+                {qrUrl && (
+                  <div className="p-3.5 bg-[#08080a] border border-white/5 rounded-xl flex items-center gap-4">
+                    <div className="bg-black border border-amber-500/20 p-2 rounded-xl shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={qrUrl}
+                        alt={`QR Code for Seat ${selectedSeat.id}`}
+                        className="w-24 h-24 select-none"
+                      />
+                    </div>
+                    <div className="space-y-1 min-w-0">
+                      <span className="text-[9px] font-mono text-amber-500 uppercase tracking-widest block">Desk QR Token</span>
+                      <span className="text-[11px] font-bold text-white block">Print Check-In Decal</span>
+                      <p className="text-[10px] text-zinc-500 leading-normal">
+                        Students scan this decal to occupy this desk. Geofenced to library.
+                      </p>
+                      <a
+                        href={qrUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block text-[10px] font-mono font-bold text-amber-400 hover:text-white hover:underline mt-1.5"
+                      >
+                        Open QR Code image ↗
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {detailError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">{detailError}</div>
+                )}
+
+                {/* Users list */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">Past users of this seat</span>
+                      <span className="text-[10px] font-mono text-zinc-600">({seatUsers.length})</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <input
+                        type="date"
+                        value={filterDate}
+                        onChange={(e) => setFilterDate(e.target.value)}
+                        className="bg-zinc-900 border border-white/10 rounded-lg text-[10px] font-mono px-2 py-1 text-zinc-300 focus:border-amber-500 focus:outline-none select-none cursor-pointer"
+                      />
+                      {filterDate && (
+                        <button
+                          onClick={() => setFilterDate("")}
+                          className="text-[9px] font-mono text-zinc-500 hover:text-white transition-colors"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {detailLoading && seatUsers.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-zinc-600 border border-dashed border-white/5 rounded-2xl">Loading…</div>
+                  ) : seatUsers.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {seatUsers.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => handleSelectUser(item)}
+                          className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${selectedUser?.id === item.id
+                              ? "border-amber-500/30 bg-amber-500/8"
+                              : "border-white/5 bg-white/[0.01] hover:bg-white/[0.03]"
+                            }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-white truncate block">{item.name || item.email}</span>
+                              <span className="text-[10px] text-zinc-500 truncate block">{item.email}</span>
+                            </div>
+                            <div className="text-right shrink-0 flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-zinc-500">{item.activityCount} events</span>
+                              <ChevronRight className="w-3 h-3 text-zinc-700" />
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center text-xs text-zinc-600 border border-dashed border-white/5 rounded-2xl">
+                      No usage history yet for this seat.
+                    </div>
+                  )}
+                </div>
+
+                {/* Per-user activity log for this seat */}
+                {selectedUser && (
+                  <div className="space-y-3 border-t border-white/5 pt-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 truncate">
+                        Activity — {selectedUser.name || selectedUser.email}
+                      </span>
+                      <button
+                        onClick={() => { setSelectedUser(null); setSelectedUserLogs([]); }}
+                        className="text-[9px] font-mono text-zinc-500 hover:text-white transition-colors ml-1 shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {(() => {
+                      const filteredLogs = filterDate
+                        ? selectedUserLogs.filter(log => getLocalYYYYMMDD(log.timestamp) === filterDate)
+                        : selectedUserLogs;
+
+                      return filteredLogs.length > 0 ? (
+                        <div className="max-h-[300px] overflow-y-auto pr-1 space-y-4">
+                          {groupLogsByDate(filteredLogs).map(([dateStr, logsForDate]) => (
+                            <div key={dateStr} className="space-y-2.5">
+                              {/* Date Header */}
+                              <div className="text-[9px] font-mono text-amber-500/80 uppercase tracking-wider bg-amber-500/5 border border-amber-500/10 px-2 py-0.5 rounded-md inline-block">
+                                {dateStr}
+                              </div>
+
+                              {/* Group logs list */}
+                              <div className="space-y-3 pl-2.5 relative before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-white/5">
+                                {logsForDate.map((log) => (
+                                  <div key={log.id} className="flex gap-3 relative">
+                                    <span className={`w-2 h-2 rounded-full mt-1 border border-zinc-950 z-10 shrink-0 ${log.action === "CHECK_IN" ? "bg-emerald-500" :
+                                        log.action === "TAKE_BREAK" ? "bg-amber-500" :
+                                          log.action === "RETURN_FROM_BREAK" ? "bg-emerald-400" :
+                                            log.action === "PRESENCE_CONFIRMED" ? "bg-sky-500" :
+                                              "bg-rose-500"
+                                      }`} />
+                                    <div className="space-y-0.5">
+                                      <div className="text-[9px] font-mono text-zinc-500">
+                                        {new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                                      </div>
+                                      <span className={`inline-flex px-1.5 py-0.5 rounded border text-[9px] font-mono ${getActionColor(log.action)}`}>
+                                        {getActionText(log.action)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-6 text-center text-xs text-zinc-600 border border-dashed border-white/5 rounded-2xl">
+                          {filterDate ? "No activity logged for this date." : `No logs for this user on Seat ${selectedSeat.id}.`}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Printable All Decals Sheet */}
+        {isPrintingAll && (
+          <div className="fixed inset-0 z-50 bg-[#060608] overflow-y-auto p-8 no-print-overlay">
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Print Library Seat Decals</h2>
+                  <p className="text-xs text-zinc-500 mt-0.5">Generates check-in QR sheets for all registered seats.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold rounded-xl btn-haptic flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" /> Print Decals
+                  </button>
+                  <button
+                    onClick={() => setIsPrintingAll(false)}
+                    className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid of printable QR decals */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                {seats.map((seat) => {
+                  const checkinUrl = `${window.location.origin}/checkin/${seat.id}`;
+                  const qrCodeImg = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=000000&bgcolor=ffffff&data=${encodeURIComponent(checkinUrl)}`;
+                  return (
+                    <div key={seat.id} className="border border-white/10 bg-zinc-950/40 p-5 rounded-2xl flex flex-col items-center justify-between gap-4 text-center break-inside-avoid">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono text-amber-500 uppercase tracking-widest block font-bold">DESKGUARD SYSTEM</span>
+                        <h4 className="text-xl font-extrabold text-white">SEAT {seat.id}</h4>
+                        <p className="text-[9px] text-zinc-500">{seat.section}</p>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-white/5">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={qrCodeImg}
+                          alt={`QR Seat ${seat.id}`}
+                          className="w-32 h-32 select-none"
+                        />
+                      </div>
+
+                      <div className="text-[8px] text-zinc-500 leading-normal max-w-[20ch]">
+                        Scan to reserve. Subject to library geo-fence.
                       </div>
                     </div>
                   );
                 })}
               </div>
-
-              <p className="text-[10px] font-mono text-zinc-600 text-center pt-2 border-t border-white/5">
-                Click any seat on map or table row to inspect per-seat activity log
-              </p>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── Seat-scoped activity panel (slide-in from bottom) ── */}
-      {selectedSeat && (
-        <div className="fixed bottom-4 left-4 right-4 z-40 xl:left-auto xl:right-6 xl:bottom-6 xl:w-[440px]">
-          <div className="double-bezel-outer bg-zinc-950/95 backdrop-blur-xl shadow-2xl">
-            <div className="double-bezel-inner p-4 flex flex-col gap-4 max-h-[72dvh] overflow-y-auto">
-
-              {/* Header */}
-              <div className="flex items-start justify-between gap-3 border-b border-white/5 pb-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-amber-500" />
-                    <h3 className="text-sm font-bold text-white">Seat {selectedSeat.id} History</h3>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">{selectedSeat.section}</p>
-                </div>
-                <button
-                  onClick={() => { setSelectedSeat(null); setSelectedUser(null); setSelectedUserLogs([]); setSeatUsers([]); }}
-                  className="text-[10px] font-mono text-zinc-500 hover:text-white transition-colors shrink-0 mt-0.5"
-                >
-                  ✕ Close
-                </button>
-              </div>
-
-              {/* Current occupant details */}
-              {selectedSeat.activeSession ? (
-                <div className="p-3.5 rounded-xl border border-amber-500/25 bg-amber-500/5 space-y-2">
-                  <div className="text-[9px] font-mono text-amber-500/80 uppercase tracking-widest">Current Occupant</div>
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/35 flex items-center justify-center text-amber-400 text-xs font-bold font-mono shrink-0">
-                      {(selectedSeat.activeSession.user.name || selectedSeat.activeSession.user.email)[0].toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-bold text-white block truncate">
-                        {selectedSeat.activeSession.user.name || "No Name"}
-                      </span>
-                      <span className="text-[10px] text-zinc-400 block truncate">
-                        {selectedSeat.activeSession.user.email}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-zinc-500 font-mono mt-1 pt-1.5 border-t border-white/5 space-y-0.5">
-                    <div>Session started: {new Date(selectedSeat.activeSession.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
-                    {selectedSeat.activeSession.awayUntil && (
-                      <div className="text-amber-400">
-                        Away until: {new Date(selectedSeat.activeSession.awayUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3.5 bg-white/[0.01] border border-dashed border-white/5 rounded-xl text-center">
-                  <p className="text-xs text-zinc-600">This seat is currently available.</p>
-                </div>
-              )}
-
-              {/* Printable Desk QR Code */}
-              {qrUrl && (
-                <div className="p-3.5 bg-[#08080a] border border-white/5 rounded-xl flex items-center gap-4">
-                  <div className="bg-black border border-amber-500/20 p-2 rounded-xl shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={qrUrl} 
-                      alt={`QR Code for Seat ${selectedSeat.id}`} 
-                      className="w-24 h-24 select-none" 
-                    />
-                  </div>
-                  <div className="space-y-1 min-w-0">
-                    <span className="text-[9px] font-mono text-amber-500 uppercase tracking-widest block">Desk QR Token</span>
-                    <span className="text-[11px] font-bold text-white block">Print Check-In Decal</span>
-                    <p className="text-[10px] text-zinc-500 leading-normal">
-                      Students scan this decal to occupy this desk. Geofenced to library.
-                    </p>
-                    <a
-                      href={qrUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-block text-[10px] font-mono font-bold text-amber-400 hover:text-white hover:underline mt-1.5"
-                    >
-                      Open QR Code image ↗
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {detailError && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">{detailError}</div>
-              )}
-
-              {/* Users list */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">Past users of this seat</span>
-                    <span className="text-[10px] font-mono text-zinc-600">({seatUsers.length})</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <input
-                      type="date"
-                      value={filterDate}
-                      onChange={(e) => setFilterDate(e.target.value)}
-                      className="bg-zinc-900 border border-white/10 rounded-lg text-[10px] font-mono px-2 py-1 text-zinc-300 focus:border-amber-500 focus:outline-none select-none cursor-pointer"
-                    />
-                    {filterDate && (
-                      <button
-                        onClick={() => setFilterDate("")}
-                        className="text-[9px] font-mono text-zinc-500 hover:text-white transition-colors"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {detailLoading && seatUsers.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-zinc-600 border border-dashed border-white/5 rounded-2xl">Loading…</div>
-                ) : seatUsers.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {seatUsers.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => handleSelectUser(item)}
-                        className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${
-                          selectedUser?.id === item.id
-                            ? "border-amber-500/30 bg-amber-500/8"
-                            : "border-white/5 bg-white/[0.01] hover:bg-white/[0.03]"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <span className="text-xs font-semibold text-white truncate block">{item.name || item.email}</span>
-                            <span className="text-[10px] text-zinc-500 truncate block">{item.email}</span>
-                          </div>
-                          <div className="text-right shrink-0 flex items-center gap-2">
-                            <span className="text-[10px] font-mono text-zinc-500">{item.activityCount} events</span>
-                            <ChevronRight className="w-3 h-3 text-zinc-700" />
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-6 text-center text-xs text-zinc-600 border border-dashed border-white/5 rounded-2xl">
-                    No usage history yet for this seat.
-                  </div>
-                )}
-              </div>
-
-              {/* Per-user activity log for this seat */}
-              {selectedUser && (
-                <div className="space-y-3 border-t border-white/5 pt-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 truncate">
-                      Activity — {selectedUser.name || selectedUser.email}
-                    </span>
-                    <button
-                      onClick={() => { setSelectedUser(null); setSelectedUserLogs([]); }}
-                      className="text-[9px] font-mono text-zinc-500 hover:text-white transition-colors ml-1 shrink-0"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  {(() => {
-                    const filteredLogs = filterDate
-                      ? selectedUserLogs.filter(log => getLocalYYYYMMDD(log.timestamp) === filterDate)
-                      : selectedUserLogs;
-
-                    return filteredLogs.length > 0 ? (
-                      <div className="max-h-[300px] overflow-y-auto pr-1 space-y-4">
-                        {groupLogsByDate(filteredLogs).map(([dateStr, logsForDate]) => (
-                          <div key={dateStr} className="space-y-2.5">
-                            {/* Date Header */}
-                            <div className="text-[9px] font-mono text-amber-500/80 uppercase tracking-wider bg-amber-500/5 border border-amber-500/10 px-2 py-0.5 rounded-md inline-block">
-                              {dateStr}
-                            </div>
-
-                            {/* Group logs list */}
-                            <div className="space-y-3 pl-2.5 relative before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-white/5">
-                              {logsForDate.map((log) => (
-                                <div key={log.id} className="flex gap-3 relative">
-                                  <span className={`w-2 h-2 rounded-full mt-1 border border-zinc-950 z-10 shrink-0 ${
-                                    log.action === "CHECK_IN" ? "bg-emerald-500" :
-                                    log.action === "TAKE_BREAK" ? "bg-amber-500" :
-                                    log.action === "RETURN_FROM_BREAK" ? "bg-emerald-400" :
-                                    log.action === "PRESENCE_CONFIRMED" ? "bg-sky-500" :
-                                    "bg-rose-500"
-                                  }`} />
-                                  <div className="space-y-0.5">
-                                    <div className="text-[9px] font-mono text-zinc-500">
-                                      {new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                                    </div>
-                                    <span className={`inline-flex px-1.5 py-0.5 rounded border text-[9px] font-mono ${getActionColor(log.action)}`}>
-                                      {getActionText(log.action)}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="py-6 text-center text-xs text-zinc-600 border border-dashed border-white/5 rounded-2xl">
-                        {filterDate ? "No activity logged for this date." : `No logs for this user on Seat ${selectedSeat.id}.`}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Printable All Decals Sheet */}
-      {isPrintingAll && (
-        <div className="fixed inset-0 z-50 bg-[#060608] overflow-y-auto p-8 no-print-overlay">
-          <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex items-center justify-between border-b border-white/5 pb-4">
-              <div>
-                <h2 className="text-lg font-bold text-white">Print Library Seat Decals</h2>
-                <p className="text-xs text-zinc-500 mt-0.5">Generates check-in QR sheets for all registered seats.</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold rounded-xl btn-haptic flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" /> Print Decals
-                </button>
-                <button
-                  onClick={() => setIsPrintingAll(false)}
-                  className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-xs font-bold rounded-xl cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
             </div>
 
-            {/* Grid of printable QR decals */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-              {seats.map((seat) => {
-                const checkinUrl = `${window.location.origin}/checkin/${seat.id}`;
-                const qrCodeImg = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=000000&bgcolor=ffffff&data=${encodeURIComponent(checkinUrl)}`;
-                return (
-                  <div key={seat.id} className="border border-white/10 bg-zinc-950/40 p-5 rounded-2xl flex flex-col items-center justify-between gap-4 text-center break-inside-avoid">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-mono text-amber-500 uppercase tracking-widest block font-bold">DESKGUARD SYSTEM</span>
-                      <h4 className="text-xl font-extrabold text-white">SEAT {seat.id}</h4>
-                      <p className="text-[9px] text-zinc-500">{seat.section}</p>
-                    </div>
-                    
-                    <div className="bg-white p-3 rounded-xl border border-white/5">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={qrCodeImg} 
-                        alt={`QR Seat ${seat.id}`} 
-                        className="w-32 h-32 select-none" 
-                      />
-                    </div>
-                    
-                    <div className="text-[8px] text-zinc-500 leading-normal max-w-[20ch]">
-                      Scan to reserve. Subject to library geo-fence.
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Local Print Styles overrides */}
-          <style dangerouslySetInnerHTML={{__html: `
+            {/* Local Print Styles overrides */}
+            <style dangerouslySetInnerHTML={{
+              __html: `
             @media print {
               body {
                 background: white !important;
@@ -806,8 +949,8 @@ export function LibrarianDashboard({
               }
             }
           `}} />
-        </div>
-      )}
+          </div>
+        )}
       </div>
 
       {/* Printable print-sheet helper container that is hidden on screen but visible during printing */}
@@ -827,16 +970,16 @@ export function LibrarianDashboard({
                   <h4 className="text-xl font-extrabold text-black">SEAT {seat.id}</h4>
                   <p className="text-[9px] text-zinc-650">{seat.section}</p>
                 </div>
-                
+
                 <div className="bg-white p-2 rounded-lg border border-zinc-200">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img 
-                    src={qrCodeImg} 
-                    alt={`QR Seat ${seat.id}`} 
-                    className="w-28 h-28 select-none" 
+                  <img
+                    src={qrCodeImg}
+                    alt={`QR Seat ${seat.id}`}
+                    className="w-28 h-28 select-none"
                   />
                 </div>
-                
+
                 <div className="text-[8px] text-zinc-500 leading-normal max-w-[20ch]">
                   Scan to reserve. Subject to library geo-fence.
                 </div>
@@ -845,6 +988,72 @@ export function LibrarianDashboard({
           })}
         </div>
       </div>
+
+      {/* ── Surprise Gift Modal ── */}
+      <AnimatePresence>
+        {showSurprise && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[10000] flex items-center justify-center p-4 backdrop-blur-xl bg-black/75"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 15 }}
+              transition={{ type: "spring", stiffness: 350, damping: 25 }}
+              className="w-full max-w-md double-bezel-outer bg-zinc-950/90 border-pink-500/20 shadow-[0_0_50px_rgba(244,63,94,0.25)] rounded-2xl relative overflow-hidden"
+            >
+              {/* Decorative top pink line */}
+              <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-pink-500 to-transparent" />
+
+              {/* Soft pink ambient background glow */}
+              <div className="absolute -top-12 -left-12 w-28 h-28 bg-pink-500/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-12 -right-12 w-28 h-28 bg-rose-500/10 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="double-bezel-inner p-8 text-center space-y-6">
+                <div className="mx-auto w-12 h-12 rounded-full bg-pink-500/10 border border-pink-500/20 flex items-center justify-center animate-pulse">
+                  <span className="text-xl">💝</span>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-medium tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-rose-400 to-pink-300 font-sans">
+                    For buddy bud bud hehe
+                  </h3>
+                  <div className="text-xs text-zinc-300 leading-relaxed space-y-4 text-left font-sans font-light">
+                    <p>
+                      Well I thought why not give you a small gift coz you're always by my side, I always hope you're smiling coz you smiling is me smiling, helping me through under confident phase i have going through, I dont give you enough credit na cutu
+                    </p>
+                    <p>
+                      I am really happy that i found you and you accepted me for who i am.
+                    </p>
+                    <p className="text-sm font-normal text-pink-400 text-center pt-2 font-mono">
+                      I really love you Aditi, thanksssssss
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      setShowSurprise(false);
+                      confetti({
+                        particleCount: 45,
+                        spread: 50,
+                        colors: ["#ec4899", "#fda4af"]
+                      });
+                    }}
+                    className="w-full py-2.5 rounded-xl border border-pink-500/30 bg-gradient-to-r from-pink-500/10 to-rose-500/10 hover:from-pink-500/20 hover:to-rose-500/20 text-pink-300 font-bold text-xs tracking-wider uppercase transition-all duration-300 shadow-[0_0_10px_rgba(236,72,153,0.1)] hover:shadow-[0_0_15px_rgba(236,72,153,0.2)] cursor-pointer btn-haptic"
+                  >
+                    Close with Love
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
