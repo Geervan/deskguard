@@ -273,13 +273,13 @@ export function StudentDashboard({ user, seats, onLogout, onRefreshData, timeTra
       {/* Student Top Bar */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/5 pb-6">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Student Dashboard</h1>
+          <h1 className="text-xl font-bold tracking-tight text-white">My Dashboard</h1>
           <p className="text-xs text-zinc-500 mt-0.5">Logged in as {user.name} ({user.email})</p>
         </div>
         
         <button
           onClick={onLogout}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 border border-white/5 bg-white/[0.02] hover:bg-white/[0.06] rounded-xl text-xs text-zinc-400 btn-haptic font-semibold"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 rounded-xl text-xs text-rose-400 btn-haptic font-semibold"
         >
           <LogOut className="w-3.5 h-3.5" /> Sign Out
         </button>

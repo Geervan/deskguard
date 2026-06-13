@@ -264,9 +264,9 @@ export function LibrarianDashboard({
 
   const handleResetDatabase = async () => {
     const ok = await confirm({
-      title: "Reset & Re-seed Demo Data?",
+      title: "Clear All Data?",
       message: "This will wipe ALL active sessions and replace the database with fresh demo data. This action cannot be undone.",
-      confirmLabel: "Yes, Reset Database",
+      confirmLabel: "Yes, Clear All Data",
       cancelLabel: "Cancel",
       variant: "danger",
     });
@@ -340,13 +340,13 @@ export function LibrarianDashboard({
           <button
             onClick={handleResetDatabase}
             disabled={isSeeding}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 rounded-xl text-xs text-amber-400 btn-haptic font-semibold disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 rounded-xl text-xs text-rose-400 btn-haptic font-semibold disabled:opacity-50"
           >
-            <RotateCcw className={`w-3.5 h-3.5 ${isSeeding ? "animate-spin" : ""}`} /> Reset & Seed Demo
+            <RotateCcw className={`w-3.5 h-3.5 ${isSeeding ? "animate-spin" : ""}`} /> Clear All Data
           </button>
           <button
             onClick={onLogout}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-white/5 bg-white/[0.02] hover:bg-white/[0.06] rounded-xl text-xs text-zinc-400 btn-haptic font-semibold"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 rounded-xl text-xs text-rose-400 btn-haptic font-semibold"
           >
             <LogOut className="w-3.5 h-3.5" /> Sign Out
           </button>
@@ -440,9 +440,10 @@ export function LibrarianDashboard({
                 <h3 className="text-sm font-bold text-white">Seat Occupancy Matrix</h3>
                 <button
                   onClick={() => startTransition(onRefreshData)}
-                  className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 hover:text-white transition-colors"
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
                 >
-                  <RefreshCw className={`w-3 h-3 ${isPending ? "animate-spin" : ""}`} /> Refresh
+                  <RefreshCw className={`w-3 h-3 ${isPending ? "animate-spin" : ""}`} /> {isPending ? "Loading..." : "Refresh"}
                 </button>
               </div>
 

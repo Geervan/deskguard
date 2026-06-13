@@ -43,9 +43,9 @@ export async function POST() {
 
     // 3. Create seats
     const sections = [
-      { name: "Reading Hall A", count: 8, prefix: "A" },
-      { name: "Reading Hall B", count: 8, prefix: "B" },
-      { name: "Silent Zone", count: 6, prefix: "S" }
+      { name: "Reading Hall A", count: 14, prefix: "A" },
+      { name: "Reading Hall B", count: 12, prefix: "B" },
+      { name: "Silent Zone", count: 8, prefix: "S" }
     ];
 
     const seatsData = [];
