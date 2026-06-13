@@ -1,0 +1,91 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  STUDENT
+  LIBRARIAN
+}
+
+enum SeatStatus {
+  AVAILABLE
+  OCCUPIED
+  AWAY
+}
+
+enum LogAction {
+  CHECK_IN
+  TAKE_BREAK
+  RETURN_FROM_BREAK
+  PRESENCE_CONFIRMED
+  PRESENCE_CHECK_MISSED
+  SESSION_ENDED_BY_STUDENT
+  RELEASED_BY_LIBRARIAN
+  AUTO_RELEASED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String?
+  role         Role          @default(STUDENT)
+  password     String?
+  sessions     SeatSession[]
+  activityLogs ActivityLog[]
+  createdAt    DateTime      @default(now())
+}
+
+model Otp {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model Seat {
+  id           String        @id // e.g. "A101", "B202"
+  section      String        // "Reading Hall A", "Reading Hall B", "Silent Zone"
+  status       SeatStatus    @default(AVAILABLE)
+  sessions     SeatSession[]
+  activityLogs ActivityLog[]
+  createdAt    DateTime      @default(now())
+}
+
+model SeatSession {
+  id                   String    @id @default(uuid())
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seatId               String
+  seat                 Seat      @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  startedAt            DateTime  @default(now())
+  awayUntil            DateTime? // When break expires
+  nextPresenceCheckAt  DateTime? // When presence modal must show
+  endedAt              DateTime? // Null if active
+  abandoned            Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+
+  @@index([endedAt])
+  @@index([seatId])
+  @@index([userId])
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seatId    String
+  seat      Seat     @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  action    LogAction
+  timestamp DateTime @default(now())
+
+  @@index([seatId])
+  @@index([userId])
+  @@index([timestamp])
+}

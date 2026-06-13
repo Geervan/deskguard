@@ -1,26 +1,191 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+@theme {
+  --color-background: #000000;
+  --color-foreground: #f4f4f5;
+  
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  --color-card-bg: rgba(10, 10, 12, 0.85);
+  --color-card-border: rgba(217, 119, 6, 0.18);
+  --color-card-highlight: rgba(255, 255, 255, 0.04);
+  
+  --color-brand-green: #d97706; /* Sophisticated Amber-Bronze for Available */
+  --color-brand-red: #ef4444;   /* Warm Crimson for Occupied */
+  --color-brand-yellow: #f97316;/* Orange for Away/Break */
+  
+  --ease-out-custom: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-custom: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --font-geist-sans: 'Geist Sans', system-ui, sans-serif;
+  --font-geist-mono: 'Geist Mono', monospace;
+  --accent-amber: #d97706;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #000000;
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(217, 119, 6, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(217, 119, 6, 0.3);
+}
+
+/* Fine structural guidelines */
+.blueprint-line-y {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, rgba(217, 119, 6, 0.08) 20%, rgba(217, 119, 6, 0.08) 80%, transparent);
+}
+
+.blueprint-line-x {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(217, 119, 6, 0.08) 20%, rgba(217, 119, 6, 0.08) 80%, transparent);
+}
+
+/* Glowing dot grid overlay */
+.dot-grid {
+  background-image: radial-gradient(rgba(217, 119, 6, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* (neon-scan removed — full-width bar was too intrusive) */
+
+/* ── Neon traversing beam strikes ── */
+
+/* Horizontal beam (standard) */
+.neon-pulse-h {
+  position: absolute;
+  height: 1.5px;
+  width: 120px;
+  background: linear-gradient(90deg, transparent, rgba(217, 119, 6, 0.65) 45%, rgba(255, 180, 40, 0.9) 50%, rgba(217, 119, 6, 0.65) 55%, transparent 100%);
+  box-shadow: 0 0 6px rgba(217, 119, 6, 0.5), 0 0 14px rgba(217, 119, 6, 0.2);
+  animation: slide-h var(--beam-dur, 11s) cubic-bezier(0.4, 0, 0.2, 1) var(--beam-delay, 0s) infinite;
+  pointer-events: none;
+}
+
+/* Horizontal beam — thin fast */
+.neon-pulse-h-fast {
+  position: absolute;
+  height: 1px;
+  width: 70px;
+  background: linear-gradient(90deg, transparent, rgba(217, 119, 6, 0.5) 50%, transparent 100%);
+  box-shadow: 0 0 4px rgba(217, 119, 6, 0.35);
+  animation: slide-h var(--beam-dur, 6s) cubic-bezier(0.55, 0, 0.45, 1) var(--beam-delay, 0s) infinite;
+  pointer-events: none;
+}
+
+/* Vertical beam (standard) */
+.neon-pulse-v {
+  position: absolute;
+  width: 1.5px;
+  height: 120px;
+  background: linear-gradient(180deg, transparent, rgba(217, 119, 6, 0.65) 45%, rgba(255, 180, 40, 0.9) 50%, rgba(217, 119, 6, 0.65) 55%, transparent 100%);
+  box-shadow: 0 0 6px rgba(217, 119, 6, 0.5), 0 0 14px rgba(217, 119, 6, 0.2);
+  animation: slide-v var(--beam-dur, 13s) cubic-bezier(0.4, 0, 0.2, 1) var(--beam-delay, 0s) infinite;
+  pointer-events: none;
+}
+
+/* Vertical beam — slow wide glow */
+.neon-pulse-v-slow {
+  position: absolute;
+  width: 2px;
+  height: 200px;
+  background: linear-gradient(180deg, transparent, rgba(217, 119, 6, 0.35) 40%, rgba(255, 190, 60, 0.55) 50%, rgba(217, 119, 6, 0.35) 60%, transparent 100%);
+  box-shadow: 0 0 10px rgba(217, 119, 6, 0.3), 0 0 24px rgba(217, 119, 6, 0.1);
+  animation: slide-v var(--beam-dur, 20s) cubic-bezier(0.25, 0.46, 0.45, 0.94) var(--beam-delay, 0s) infinite;
+  pointer-events: none;
+}
+
+@keyframes slide-h {
+  0%   { left: -220px; opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+@keyframes slide-v {
+  0%   { top: -220px; opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Glassmorphism panel styling */
+.glass-panel {
+  background: rgba(10, 10, 12, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Double-Bezel nested card architecture (Amber-tinted for tactile feel) */
+.double-bezel-outer {
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 6px;
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.double-bezel-outer:hover {
+  border-color: rgba(217, 119, 6, 0.22);
+  box-shadow: 0 8px 32px rgba(217, 119, 6, 0.05);
+}
+
+.double-bezel-inner {
+  background: rgba(10, 10, 12, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.03);
+  border-radius: calc(24px - 6px);
+  padding: 16px;
+}
+
+/* Haptic active state */
+.btn-haptic {
+  transition: transform 140ms var(--ease-out-custom), background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.btn-haptic:active {
+  transform: scale(0.97);
+}
+
+/* Grainy noise overlay */
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.02;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
